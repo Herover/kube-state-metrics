@@ -25,6 +25,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,8 +36,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
+	"k8s.io/kube-state-metrics/internal/gdrive"
 	"k8s.io/kube-state-metrics/internal/store"
 	"k8s.io/kube-state-metrics/pkg/allowdenylist"
+	metricsstore "k8s.io/kube-state-metrics/pkg/metrics_store"
 	"k8s.io/kube-state-metrics/pkg/metricshandler"
 	"k8s.io/kube-state-metrics/pkg/options"
 	"k8s.io/kube-state-metrics/pkg/util/proc"
@@ -242,5 +245,62 @@ func serveMetrics(ctx context.Context, kubeClient clientset.Interface, storeBuil
              </body>
              </html>`))
 	})
+
+	gdrive := gdrive.Create()
+
+	ticker := time.NewTicker(5 * time.Second)
+	quit := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				ss := m.Stores()
+				fmt.Println("tick")
+				ticker.Stop()
+				fmt.Println("tock")
+				for _, s := range ss {
+					ms := s.(*metricsstore.MetricsStore)
+					data := make(map[string][]interface{})
+					var name string
+					var help string
+					for _, family := range ms.GetFamilies() {
+						//fmt.Printf("%s,%s\n", family.Name, family.Help)
+						if len(family.Metrics) > 0 {
+							name = family.Name
+							help = family.Help
+							//fmt.Println("value," + strings.Join(family.Metrics[0].LabelKeys, ","))
+							for ki, key := range family.Metrics[0].LabelKeys {
+								if _, exists := data[key]; !exists {
+									data[key] = make([]interface{}, len(family.Metrics))
+								}
+								for _, metric := range family.Metrics {
+									data[key] = append(data[key], metric.LabelValues[ki])
+								}
+							}
+						}
+						/*
+							for _, metric := range family.Metrics {
+								fmt.Printf("%v,%s\n", metric.Value, strings.Join(metric.LabelValues, ","))
+							}
+						*/
+						fmt.Println("Logging", family.Name)
+					}
+					fmt.Printf("DATA %+v\n", data)
+					if len(data) != 0 {
+						err := gdrive.LogRow(name, help, data)
+						if err != nil {
+							log.Fatal(err)
+							os.Exit(1)
+						}
+					}
+				}
+				fmt.Println("tack")
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
 	log.Fatal(http.ListenAndServe(listenAddress, mux))
 }
