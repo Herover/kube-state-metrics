@@ -86,6 +86,10 @@ func (m *MetricsHandler) ConfigureSharding(ctx context.Context, shard int32, tot
 	m.curTotalShards = totalShards
 }
 
+func (m *MetricsHandler) Stores() []cache.Store {
+	return m.stores
+}
+
 // Run configures the MetricsHandler's sharding and if autosharding is enabled
 // re-configures sharding on re-sharding events. Run should only be called
 // once.

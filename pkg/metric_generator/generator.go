@@ -39,6 +39,7 @@ func (g *FamilyGenerator) Generate(obj interface{}) *metric.Family {
 	family := g.GenerateFunc(obj)
 	family.Name = g.Name
 	family.Type = g.Type
+	family.Help = g.Help
 	return family
 }
 

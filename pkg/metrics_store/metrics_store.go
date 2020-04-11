@@ -45,6 +45,9 @@ type MetricsStore struct {
 	// generateMetricsFunc generates metrics based on a given Kubernetes object
 	// and returns them grouped by metric family.
 	generateMetricsFunc func(interface{}) []metric.FamilyInterface
+
+	// Easy access to recently added metric family
+	metricFamilies map[types.UID]metric.Family
 }
 
 // NewMetricsStore returns a new MetricsStore
@@ -53,6 +56,7 @@ func NewMetricsStore(headers []string, generateFunc func(interface{}) []metric.F
 		generateMetricsFunc: generateFunc,
 		headers:             headers,
 		metrics:             map[types.UID][][]byte{},
+		metricFamilies:      map[types.UID]metric.Family{},
 	}
 }
 
@@ -74,6 +78,11 @@ func (s *MetricsStore) Add(obj interface{}) error {
 
 	for i, f := range families {
 		familyStrings[i] = f.ByteSlice()
+
+		f.Inspect(func(family metric.Family) {
+			s.metricFamilies[o.GetUID()] = family
+		})
+
 	}
 
 	s.metrics[o.GetUID()] = familyStrings
@@ -106,6 +115,11 @@ func (s *MetricsStore) Delete(obj interface{}) error {
 // List implements the List method of the store interface.
 func (s *MetricsStore) List() []interface{} {
 	return nil
+}
+
+// GetFamilies Returns content of metricFamilies. Might belong to s.List
+func (s *MetricsStore) GetFamilies() map[types.UID]metric.Family {
+	return s.metricFamilies
 }
 
 // ListKeys implements the ListKeys method of the store interface.
